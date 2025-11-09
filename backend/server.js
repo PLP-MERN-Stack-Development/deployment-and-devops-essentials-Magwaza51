@@ -39,17 +39,24 @@ if (process.env.NODE_ENV === 'production') {
   app.use(morgan('dev'));
 }
 
-// MongoDB connection
-const connectDB = async () => {
+// MongoDB connection with retry (do not exit the process on failure)
+const connectDB = async (retries = 5, delayMs = 5000) => {
   try {
     await mongoose.connect(process.env.MONGODB_URI);
     console.log('✅ MongoDB Connected Successfully');
   } catch (error) {
     console.error('❌ MongoDB Connection Error:', error.message);
-    process.exit(1);
+    if (retries > 0) {
+      console.log(`Retrying MongoDB connection in ${delayMs / 1000}s... (${retries} retries left)`);
+      setTimeout(() => connectDB(retries - 1, Math.min(delayMs * 2, 60000)), delayMs);
+    } else {
+      console.error('Exceeded MongoDB connection retries. The application will keep running and will retry in background.');
+      // Do NOT exit the process; let the process keep running so platform (Render) can manage restarts
+    }
   }
 };
 
+// Start initial connection attempt but do not block server start
 connectDB();
 
 // Health check endpoint
